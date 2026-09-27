@@ -78,7 +78,7 @@ A 13M-parameter model trained on 3.1M TinyStories tokens for 150 steps.
 Training loss fell from 10.8 to 1.6, confirming the optimizer and loss
 computation work end-to-end.
 
-![Training loss](docs/assets/loss-curve.png)
+![Training loss](docs/assets/training.gif)
 
 The checkpoint exports to safetensors and loads directly in tinyinfer — the
 full train→export→generate pipeline is verified.
