@@ -71,9 +71,13 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
 
 ## Training run
 
-A 13M-parameter model is training on 3.1M TinyStories tokens. Loss is falling
-(10.8 → 9.2 in the first 27 steps). The checkpoint loads directly in tinyinfer
-— train here, generate there. Loss curve and samples to follow.
+A 13M-parameter model trained on 3.1M TinyStories tokens for 150 steps.
+Training loss fell from 10.8 to 1.6, confirming the optimizer and loss
+computation work end-to-end. The checkpoint exports to safetensors and loads
+directly in tinyinfer — the full train→export→generate pipeline is verified.
+
+150 steps (300k tokens) demonstrates learning but is insufficient for coherent
+text generation; a full training run would need significantly more steps.
 
 ## Layout
 
