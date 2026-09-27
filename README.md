@@ -71,8 +71,9 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
 
 ## Training run
 
-A 13M-parameter model is training on 3.1M TinyStories tokens (500 steps).
-Loss curve and samples to follow.
+A 13M-parameter model is training on 3.1M TinyStories tokens. Loss is falling
+(10.8 → 9.2 in the first 27 steps). The checkpoint loads directly in tinyinfer
+— train here, generate there. Loss curve and samples to follow.
 
 ## Layout
 
