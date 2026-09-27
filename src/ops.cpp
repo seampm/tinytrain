@@ -89,17 +89,37 @@ int64_t norm_dim(int64_t dim, int64_t rank) {
 }
 
 // C[M,N] = A[M,K] @ B[K,N], row-major contiguous.
+//
+// Cache-blocked (MB x NB tiles): each thread's C tile (MB*NB) stays in L2
+// across the K loop while the B panel row (NB) is reused from L1 across the
+// MB rows. This keeps the big B matrix from streaming once per C row.
 void sgemm(const float* A, const float* B, float* C, int64_t M, int64_t K, int64_t N) {
-    for (int64_t i = 0; i < M; ++i)
-        for (int64_t j = 0; j < N; ++j)
-            C[i * N + j] = 0.0f;
-    for (int64_t i = 0; i < M; ++i) {
-        for (int64_t k = 0; k < K; ++k) {
-            float aik = A[i * K + k];
-            float* crow = C + i * N;
-            const float* brow = B + k * N;
-            for (int64_t j = 0; j < N; ++j)
-                crow[j] += aik * brow[j];
+    constexpr int64_t MB = 64;
+    constexpr int64_t NB = 2048;
+    int64_t mblocks = (M + MB - 1) / MB;
+    int64_t nblocks = (N + NB - 1) / NB;
+#pragma omp parallel for collapse(2) schedule(static)
+    for (int64_t nb = 0; nb < nblocks; ++nb) {
+        for (int64_t mb = 0; mb < mblocks; ++mb) {
+            int64_t j0 = nb * NB;
+            int64_t j1 = j0 + NB < N ? j0 + NB : N;
+            int64_t i0 = mb * MB;
+            int64_t i1 = i0 + MB < M ? i0 + MB : M;
+            int64_t nn = j1 - j0;
+            for (int64_t i = i0; i < i1; ++i) {
+                float* crow = C + i * N + j0;
+                for (int64_t j = 0; j < nn; ++j)
+                    crow[j] = 0.0f;
+            }
+            for (int64_t k = 0; k < K; ++k) {
+                const float* brow = B + k * N + j0;
+                for (int64_t i = i0; i < i1; ++i) {
+                    float aik = A[i * K + k];
+                    float* crow = C + i * N + j0;
+                    for (int64_t j = 0; j < nn; ++j)
+                        crow[j] += aik * brow[j];
+                }
+            }
         }
     }
 }
@@ -388,7 +408,7 @@ Tensor sum(const Tensor& a, int64_t dim, bool keepdim) {
     if (out.requires_grad()) {
         auto ao = a.impl(), oo = out.impl();
         oo->prev = {ao};
-        oo->backward_fn = [ao, oo, dim, in_shape = a.shape(), in_strides = a.impl()->strides,
+        oo->backward_fn = [ao, oo, dim, keepdim, in_shape = a.shape(), in_strides = a.impl()->strides,
                            out_strides = out.impl()->strides]() {
             if (!ao->requires_grad)
                 return;
@@ -404,8 +424,11 @@ Tensor sum(const Tensor& a, int64_t dim, bool keepdim) {
                 }
                 int64_t ooff = 0;
                 for (int64_t d = 0, od = 0; d < in_rank; ++d) {
-                    if (d == dim)
+                    if (d == dim) {
+                        if (keepdim)
+                            od++; // keepdim retains the size-1 dim in the output
                         continue;
+                    }
                     ooff += idx[static_cast<size_t>(d)] * out_strides[static_cast<size_t>(od++)];
                 }
                 ao->grad[static_cast<size_t>(l)] += g[ooff];
@@ -910,7 +933,7 @@ Tensor rmsnorm(const Tensor& a, const Tensor& weight, float eps) {
     // r = rsqrt(mean(a^2, -1, keepdim) + eps); out = a * r * weight
     Tensor a2 = mul(a, a);
     Tensor m = sum(a2, -1, true);
-    int64_t last = m.dim(m.ndim() - 1);
+    int64_t last = a.dim(a.ndim() - 1); // original dim, not the keepdim 1
     Tensor ms = div(m, full(m.shape(), static_cast<float>(last)));
     Tensor mse = add(ms, full(ms.shape(), eps));
     Tensor r = pow(mse, -0.5f);

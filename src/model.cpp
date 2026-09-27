@@ -136,7 +136,10 @@ Tensor GPTModel::forward(const std::vector<int64_t>& idx, int64_t B, int64_t T) 
         Tensor probs = softmax(scores, -1);
         probs = drop(probs);
         Tensor att = bmm(probs, vb);                            // [B*H,T,hd]
-        Tensor att_bt = reshape(att, {B, T, n_h * hd});
+        // [B*H,T,D] -> [B,H,T,D] -> [B,T,H,D] -> [B,T,H*D]: the direct
+        // reshape would interleave head and time indices incorrectly.
+        Tensor att_bt = reshape(permute(reshape(att, {B, n_h, T, hd}), {0, 2, 1, 3}),
+                                {B, T, n_h * hd});
         Tensor att_out = b.wo.forward(reshape(att_bt, {B * T, n_h * hd}));
         x = add(x, reshape(drop(att_out), {B, T, cfg_.dim}));
 

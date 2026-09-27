@@ -97,6 +97,8 @@ TEST(Autograd, Reductions) {
     auto a = randn_grad({2, 3, 4}, 13);
     gradcheck([&] { return tt::sum_all(tt::sum(a, 1)); }, {a});
     gradcheck([&] { return tt::sum_all(tt::sum(a, -1, true)); }, {a});
+    gradcheck([&] { return tt::sum_all(tt::sum(a, 1, true)); }, {a});
+    gradcheck([&] { return tt::sum_all(tt::sum(a, 0, true)); }, {a});
     gradcheck([&] { return tt::sum_all(a); }, {a});
     gradcheck([&] { return tt::mean(a); }, {a});
 }

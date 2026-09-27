@@ -17,6 +17,7 @@ public:
           float beta2 = 0.999f, float eps = 1e-8f, float weight_decay = 0.0f);
     void step();
     void zero_grad();
+    void set_lr(float lr) { lr_ = lr; }
 
 private:
     std::vector<Tensor*> params_;

@@ -20,9 +20,13 @@ list(FILTER ENGINE_SOURCES EXCLUDE REGEX ".*apps/.*\\.cpp$")
 add_library(tinytrain_lib ${ENGINE_SOURCES})
 target_include_directories(tinytrain_lib PUBLIC include)
 
-# Training CLI
-add_executable(tinytrain apps/train.cpp)
-target_link_libraries(tinytrain PRIVATE tinytrain_lib)
+# CLIs and tools
+file(GLOB APP_SOURCES CONFIGURE_DEPENDS apps/*.cpp)
+foreach(app_src ${APP_SOURCES})
+  get_filename_component(app_name ${app_src} NAME_WE)
+  add_executable(${app_name} ${app_src})
+  target_link_libraries(${app_name} PRIVATE tinytrain_lib)
+endforeach()
 
 # GoogleTest via FetchContent
 include(FetchContent)
