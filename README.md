@@ -3,6 +3,9 @@
 A from-scratch neural network training framework in C++20. No PyTorch, no
 autograd library — just a dynamic reverse-mode AD engine, neural network
 modules, optimizers, and a Llama-architecture transformer, all written by hand.
+
+**[Live demo →](https://seampm.github.io/tinytrain/)** — training loss curve, architecture, validation.
+
 Companion to [tinyinfer](https://github.com/seampm/tinyinfer): tinytrain
 *teaches* models, tinyinfer *runs* them. A trained checkpoint exports to
 safetensors with Hugging Face tensor names and loads directly into tinyinfer.
