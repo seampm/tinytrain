@@ -52,7 +52,7 @@ batch 16 × seq 128, on a 2-core CPU:
 
 | | tok/s |
 |---|---|
-| tinytrain (fp32) | ~125 |
+| tinytrain (fp32) | ~102 |
 
 The matmul uses OpenMP with cache-blocked tiling. No GPU, no BLAS — just
 hand-written C++.
@@ -71,8 +71,8 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
 
 ## Training run
 
-A 13M-parameter model is currently training on 3.1M TinyStories tokens
-(1500 steps). Loss curve and samples to follow.
+A 13M-parameter model is training on 3.1M TinyStories tokens (500 steps).
+Loss curve and samples to follow.
 
 ## Layout
 
