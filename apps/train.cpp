@@ -26,6 +26,9 @@ namespace {
 struct Args {
     std::string tokens;
     std::string out = "checkpoints";
+    std::string resume;      // checkpoint dir to resume weights from
+    int64_t start_step = 0;  // global step counter (for LR schedule when resuming)
+    int64_t schedule_steps = 0; // LR schedule horizon (0 = start_step + steps)
     int64_t steps = 1000;
     int64_t batch_size = 8;
     int64_t seq_len = 128;
@@ -114,6 +117,18 @@ bool parse(int argc, char** argv, Args& a) {
             if (!need(v))
                 return false;
             a.dropout = std::stof(v);
+        } else if (k == "--resume") {
+            if (!need(v))
+                return false;
+            a.resume = v;
+        } else if (k == "--start-step") {
+            if (!need(v))
+                return false;
+            a.start_step = std::stoll(v);
+        } else if (k == "--schedule-steps") {
+            if (!need(v))
+                return false;
+            a.schedule_steps = std::stoll(v);
         } else {
             std::cerr << "unknown arg: " << k << "\n";
             return false;
@@ -169,6 +184,10 @@ int main(int argc, char** argv) {
     // vocab_size stays 32000 (llama tokenizer)
 
     tt::GPTModel model(cfg, a.seed);
+    if (!a.resume.empty()) {
+        model.load_checkpoint(a.resume);
+        std::cout << "resumed weights from " << a.resume << "\n";
+    }
     int64_t nparams = 0;
     for (auto* p : model.parameters())
         nparams += p->numel();
@@ -182,21 +201,23 @@ int main(int argc, char** argv) {
         std::cerr << "cannot create " << a.out << "\n";
         return 1;
     }
-    std::ofstream logf(a.out + "/losses.txt");
+    std::ofstream logf(a.out + "/losses.txt", a.start_step > 0 ? std::ios::app : std::ios::trunc);
 
     int64_t B = a.batch_size, T = a.seq_len;
     std::vector<int64_t> idx(static_cast<size_t>(B * T));
     std::vector<int64_t> targets(static_cast<size_t>(B * T));
 
+    int64_t total_steps = a.schedule_steps > 0 ? a.schedule_steps : a.start_step + a.steps;
     auto t0 = std::chrono::steady_clock::now();
     for (int64_t step = 0; step < a.steps; ++step) {
+        int64_t gstep = a.start_step + step; // global step for the LR schedule
         // cosine schedule with linear warmup, decaying to 10% of peak
         float lr_scale;
-        if (step < a.warmup) {
-            lr_scale = static_cast<float>(step + 1) / static_cast<float>(a.warmup);
+        if (gstep < a.warmup) {
+            lr_scale = static_cast<float>(gstep + 1) / static_cast<float>(a.warmup);
         } else {
-            float prog = static_cast<float>(step - a.warmup) /
-                         static_cast<float>(std::max<int64_t>(a.steps - a.warmup, 1));
+            float prog = static_cast<float>(gstep - a.warmup) /
+                         static_cast<float>(std::max<int64_t>(total_steps - a.warmup, 1));
             lr_scale = 0.1f + 0.9f * 0.5f * (1.0f + std::cos(3.14159265f * prog));
         }
 
@@ -222,13 +243,13 @@ int main(int argc, char** argv) {
         double secs =
             std::chrono::duration<double>(t1 - t0).count() / (step + 1);
         double tps = (B * T) / secs;
-        std::cout << "step " << step << " loss " << lossv << " lr_scale "
+        std::cout << "step " << gstep << " loss " << lossv << " lr_scale "
                   << lr_scale << " tok/s " << static_cast<int64_t>(tps) << "\n";
-        logf << step << " " << lossv << "\n";
+        logf << gstep << " " << lossv << "\n";
         logf.flush();
 
-        if ((step + 1) % a.ckpt_every == 0) {
-            std::string dir = a.out + "/ckpt-" + std::to_string(step + 1);
+        if ((gstep + 1) % a.ckpt_every == 0) {
+            std::string dir = a.out + "/ckpt-" + std::to_string(gstep + 1);
             model.save_checkpoint(dir);
             std::cout << "checkpoint: " << dir << "\n";
         }

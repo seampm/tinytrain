@@ -226,4 +226,57 @@ void GPTModel::save_checkpoint(const std::string& dir) const {
     cf << cfg.dump(2);
 }
 
+void GPTModel::load_checkpoint(const std::string& dir) {
+    // Reads the safetensors written by save_checkpoint and copies weights
+    // into the model's parameters. Optimizer state is not restored.
+    std::string path = dir + "/model.safetensors";
+    std::ifstream f(path, std::ios::binary);
+    if (!f)
+        throw std::runtime_error("load_checkpoint: cannot open " + path);
+    uint64_t hlen = 0;
+    f.read(reinterpret_cast<char*>(&hlen), 8);
+    std::string hstr(static_cast<size_t>(hlen), '\0');
+    f.read(hstr.data(), static_cast<std::streamsize>(hlen));
+    nlohmann::json header = nlohmann::json::parse(hstr);
+
+    struct Named {
+        std::string name;
+        Tensor* t;
+    };
+    std::vector<Named> tensors;
+    tensors.push_back({"model.embed_tokens.weight", &tok_embeddings.weight});
+    for (int64_t l = 0; l < cfg_.n_layers; ++l) {
+        Block& b = blocks_[static_cast<size_t>(l)];
+        std::string pre = "model.layers." + std::to_string(l);
+        tensors.push_back({pre + ".self_attn.q_proj.weight", &b.wq.weight});
+        tensors.push_back({pre + ".self_attn.k_proj.weight", &b.wk.weight});
+        tensors.push_back({pre + ".self_attn.v_proj.weight", &b.wv.weight});
+        tensors.push_back({pre + ".self_attn.o_proj.weight", &b.wo.weight});
+        tensors.push_back({pre + ".mlp.gate_proj.weight", &b.wgate.weight});
+        tensors.push_back({pre + ".mlp.up_proj.weight", &b.wup.weight});
+        tensors.push_back({pre + ".mlp.down_proj.weight", &b.wdown.weight});
+        tensors.push_back({pre + ".input_layernorm.weight", &b.rms_attn.weight});
+        tensors.push_back({pre + ".post_attention_layernorm.weight", &b.rms_ffn.weight});
+    }
+    tensors.push_back({"model.norm.weight", &rms_final.weight});
+    if (!tie_weights_)
+        tensors.push_back({"lm_head.weight", &lm_head.weight});
+
+    for (auto& nt : tensors) {
+        auto it = header.find(nt.name);
+        if (it == header.end())
+            throw std::runtime_error("load_checkpoint: missing tensor " + nt.name);
+        auto data_off = (*it)["data_offsets"];
+        uint64_t beg = data_off[0].get<uint64_t>();
+        uint64_t end = data_off[1].get<uint64_t>();
+        if (end - beg != static_cast<uint64_t>(nt.t->numel() * 4))
+            throw std::runtime_error("load_checkpoint: size mismatch for " + nt.name);
+        f.seekg(static_cast<std::streamoff>(8 + hlen + beg), std::ios::beg);
+        f.read(reinterpret_cast<char*>(nt.t->data()),
+               static_cast<std::streamsize>(nt.t->numel() * 4));
+        if (!f)
+            throw std::runtime_error("load_checkpoint: read failed for " + nt.name);
+    }
+}
+
 } // namespace tt

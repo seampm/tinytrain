@@ -37,6 +37,7 @@ public:
     // Writes <dir>/model.safetensors (F32, tinyinfer tensor names) and
     // <dir>/config.json (tinyinfer model config).
     void save_checkpoint(const std::string& dir) const;
+    void load_checkpoint(const std::string& dir);
 
     const GPTConfig& config() const { return cfg_; }
 
