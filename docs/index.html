@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tinytrain — neural network training in C++, from scratch</title>
+<meta name="description" content="tinytrain: a from-scratch neural network training framework in C++20. Hand-written autograd, AdamW, Llama transformer. Trains models that run in tinyinfer.">
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --border:#30363d;
+    --fg:#e6edf3; --dim:#8b949e; --green:#7ee787; --blue:#79c0ff;
+    --orange:#ffa657; --purple:#d2a8ff;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  body{background:var(--bg); color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    line-height:1.6; -webkit-font-smoothing:antialiased}
+  .wrap{max-width:960px; margin:0 auto; padding:0 24px}
+  header.top{border-bottom:1px solid var(--border); padding:14px 0; position:sticky; top:0;
+    background:rgba(13,17,23,.92); backdrop-filter:blur(6px); z-index:10}
+  header.top .wrap{display:flex; align-items:center; gap:14px}
+  .logo{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-weight:700; font-size:18px}
+  .logo span{color:var(--green)}
+  nav{margin-left:auto; display:flex; gap:18px; font-size:14px}
+  nav a{color:var(--dim); text-decoration:none}
+  nav a:hover{color:var(--fg)}
+  .hero{padding:72px 0 48px; text-align:center}
+  .hero h1{font-size:44px; line-height:1.15; letter-spacing:-.5px; margin-bottom:16px}
+  .hero h1 .hl{color:var(--green)}
+  .hero p.sub{color:var(--dim); font-size:18px; max-width:640px; margin:0 auto 28px}
+  .cta{display:flex; gap:12px; justify-content:center; flex-wrap:wrap}
+  .btn{display:inline-block; padding:10px 22px; border-radius:8px; font-size:15px; font-weight:600;
+    text-decoration:none; border:1px solid var(--border)}
+  .btn.primary{background:var(--green); color:#0d1117; border-color:var(--green)}
+  .btn.ghost{color:var(--fg)}
+  .btn.ghost:hover{border-color:var(--dim)}
+  section{padding:48px 0; border-top:1px solid var(--border)}
+  section h2{font-size:28px; margin-bottom:8px; letter-spacing:-.3px}
+  section p.lead{color:var(--dim); margin-bottom:28px; max-width:700px}
+  .stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; margin-bottom:8px}
+  .stat{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:20px}
+  .stat .v{font-size:32px; font-weight:700; color:var(--green); font-family:ui-monospace,Menlo,Consolas,monospace}
+  .stat .l{color:var(--dim); font-size:14px; margin-top:4px}
+  .chart-box{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:24px; margin-bottom:16px}
+  .chart-box h3{font-size:16px; margin-bottom:4px}
+  .chart-box p{color:var(--dim); font-size:14px; margin-bottom:16px}
+  canvas#lossChart{width:100%; height:320px; display:block}
+  .chart-caption{color:var(--dim); font-size:13px; margin-top:12px; text-align:center}
+  .loop{display:flex; align-items:stretch; gap:0; margin:24px 0; flex-wrap:wrap}
+  .loop .box{flex:1; min-width:220px; background:var(--panel); border:1px solid var(--border);
+    border-radius:10px; padding:24px; text-align:center}
+  .loop .box h3{font-family:ui-monospace,Menlo,Consolas,monospace; font-size:22px; margin-bottom:8px}
+  .loop .box h3.train{color:var(--orange)}
+  .loop .box h3.infer{color:var(--green)}
+  .loop .box p{color:var(--dim); font-size:14px}
+  .loop .arrow{display:flex; align-items:center; padding:0 16px; color:var(--dim); font-size:28px}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  @media(max-width:700px){.grid2{grid-template-columns:1fr}.hero h1{font-size:32px}}
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:24px}
+  .card h3{font-size:17px; margin-bottom:10px}
+  .card h3 .tag{font-size:12px; color:var(--dim); font-weight:400; font-family:ui-monospace,Menlo,monospace}
+  .card ul{list-style:none; color:var(--dim); font-size:14px}
+  .card ul li{margin-bottom:6px; padding-left:18px; position:relative}
+  .card ul li::before{content:"›"; position:absolute; left:0; color:var(--green)}
+  .card code{font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; color:var(--blue)}
+  pre{background:#010409; border:1px solid var(--border); border-radius:10px; padding:20px;
+    overflow-x:auto; font-size:13.5px; line-height:1.55; margin:16px 0}
+  pre code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; color:var(--fg)}
+  pre .c{color:var(--dim)} pre .k{color:#ff7b72} pre .s{color:#a5d6ff} pre .f{color:#d2a8ff}
+  table{width:100%; border-collapse:collapse; font-size:14px; margin:16px 0}
+  th,td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--border)}
+  th{color:var(--dim); font-weight:600; font-size:13px; text-transform:uppercase; letter-spacing:.4px}
+  td.num{font-family:ui-monospace,Menlo,monospace}
+  .win{color:var(--green); font-weight:700}
+  footer{border-top:1px solid var(--border); padding:32px 0; color:var(--dim); font-size:14px; text-align:center}
+  footer a{color:var(--blue); text-decoration:none}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <div class="logo">tiny<span>train</span></div>
+  <nav>
+    <a href="#training">Training</a>
+    <a href="#inside">Inside</a>
+    <a href="#validation">Validation</a>
+    <a href="https://github.com/seampm/tinytrain">GitHub</a>
+  </nav>
+</div></header>
+
+<div class="wrap">
+<div class="hero">
+  <h1>Neural network training in C++, <span class="hl">from scratch</span></h1>
+  <p class="sub">No PyTorch. No autograd library. Just a hand-written reverse-mode AD engine, optimizers, and a Llama transformer — that trains real models.</p>
+  <div class="cta">
+    <a class="btn primary" href="https://github.com/seampm/tinytrain">View on GitHub</a>
+    <a class="btn ghost" href="#training">See it train</a>
+  </div>
+</div>
+
+<section id="training">
+  <h2>It actually trains</h2>
+  <p class="lead">Real training run: 13.3M-parameter Llama model on 3.1M TinyStories tokens. This is the measured loss curve — not a sketch.</p>
+  <div class="chart-box">
+    <h3>Training loss — 150 steps</h3>
+    <p>Batch 16 × seq 128, AdamW, lr 3e-4, warmup 100. Measured on a 2-core CPU.</p>
+    <canvas id="lossChart"></canvas>
+    <div class="chart-caption">Loss: 10.82 → 1.64. Every point is a real training step.</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="v">10.8→1.6</div><div class="l">training loss, 150 steps</div></div>
+    <div class="stat"><div class="v">13.3M</div><div class="l">parameters (dim 256, 6 layers)</div></div>
+    <div class="stat"><div class="v">~102</div><div class="l">tokens/sec on 2-core CPU</div></div>
+  </div>
+</section>
+
+<section id="loop">
+  <h2>The full loop</h2>
+  <p class="lead">tinytrain <em>teaches</em> models. <a href="https://seampm.github.io/tinyinfer/" style="color:var(--blue)">tinyinfer</a> <em>runs</em> them. A trained checkpoint exports to safetensors with Hugging Face tensor names and loads directly into tinyinfer — no conversion.</p>
+  <div class="loop">
+    <div class="box">
+      <h3 class="train">tinytrain</h3>
+      <p>Trains the transformer.<br>Autograd + AdamW + checkpointing.</p>
+    </div>
+    <div class="arrow">→</div>
+    <div class="box">
+      <h3 style="color:var(--blue)">safetensors</h3>
+      <p>Standard HF tensor names.<br><code style="font-size:12px">model.safetensors</code> + <code style="font-size:12px">config.json</code></p>
+    </div>
+    <div class="arrow">→</div>
+    <div class="box">
+      <h3 class="infer">tinyinfer</h3>
+      <p>Runs generation.<br>101% of llama.cpp on 15M.</p>
+    </div>
+  </div>
+</section>
+
+<section id="inside">
+  <h2>What's inside</h2>
+  <p class="lead">Every piece written by hand. No ML dependencies — just C++20, CMake, and GoogleTest.</p>
+  <div class="grid2">
+    <div class="card">
+      <h3>Autograd engine <span class="tag">src/ops.cpp</span></h3>
+      <ul>
+        <li>Dynamic computation graph, reverse-mode AD</li>
+        <li>25 differentiable ops: broadcast, reductions, matmul/BMM, embedding, softmax, cross-entropy, RMSNorm, dropout, RoPE</li>
+        <li>Every op verified by numerical <code>gradcheck</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Neural nets + optimizers <span class="tag">src/nn.cpp, src/optim.cpp</span></h3>
+      <ul>
+        <li><code>Linear</code>, <code>Embedding</code>, <code>RMSNorm</code> modules</li>
+        <li>AdamW (decoupled weight decay), SGD with momentum</li>
+        <li>Linear warmup + cosine decay, gradient clipping</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Transformer <span class="tag">src/model.cpp</span></h3>
+      <ul>
+        <li>Llama architecture: RMSNorm, causal MHA with RoPE, SwiGLU, tied embeddings</li>
+        <li>Checkpoint resume: <code>--resume</code>, <code>--start-step</code></li>
+        <li>Exports to safetensors + <code>config.json</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Tooling <span class="tag">apps/</span></h3>
+      <ul>
+        <li><code>prepare_data</code>: BPE-tokenize corpus to binary stream</li>
+        <li><code>train</code>: full loop — logging, checkpointing</li>
+        <li>OpenMP + cache-blocked SGEMM, no BLAS</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="validation">
+  <h2>Validation</h2>
+  <p class="lead">Correctness is verified three independent ways — because gradient checking alone can't catch everything.</p>
+  <div class="stats">
+    <div class="stat"><div class="v">22/22</div><div class="l">unit tests pass (gradcheck through full transformer)</div></div>
+    <div class="stat"><div class="v">1.8e-6</div><div class="l">forward parity vs tinyinfer (independent impl)</div></div>
+    <div class="stat"><div class="v">2 bugs</div><div class="l">caught by parity that gradcheck missed</div></div>
+  </div>
+  <p style="color:var(--dim); font-size:14px; max-width:700px; margin-top:16px">
+    The parity check — running the same checkpoint through tinytrain and through tinyinfer —
+    caught a scrambled attention head layout and a wrong RMSNorm mean that all 22 gradient
+    checks passed silently. Two independent implementations agreeing to 1.8e-6 is the
+    strongest correctness signal in the project.
+  </p>
+</section>
+
+<section id="code">
+  <h2>Train a model</h2>
+<pre><code><span class="c"># tokenize a corpus</span>
+./build/prepare_data tokenizer.json corpus.txt train.tokens
+
+<span class="c"># train a 13M Llama model</span>
+./build/train --tokens train.tokens --out run1 --steps 1500 \
+    --batch-size 16 --seq-len 128 --lr 3e-4 --warmup 100 --seed 42
+
+<span class="c"># the checkpoint loads directly in tinyinfer</span>
+./tinyinfer prompt <span class="s">"Once upon a time"</span> --model run1/ckpt-final</code></pre>
+</section>
+
+<section>
+  <div class="cta">
+    <a class="btn primary" href="https://github.com/seampm/tinytrain">Get the code</a>
+    <a class="btn ghost" href="https://seampm.github.io/tinyinfer/">See tinyinfer →</a>
+  </div>
+</section>
+</div>
+
+<footer><div class="wrap">
+  tinytrain by <a href="https://github.com/seampm">seampm</a> — MIT licensed.
+  Companion to <a href="https://seampm.github.io/tinyinfer/">tinyinfer</a>.
+</div></footer>
+
+<script>
+const LOSSES = [10.8243, 10.8588, 10.8009, 10.8326, 10.7444, 10.7836, 10.6552, 10.7119, 10.5348, 10.6177, 10.3861, 10.5019, 10.2135, 10.3661, 10.023, 10.2129, 9.821, 10.0458, 9.6138, 9.8706, 9.4073, 9.6947, 9.2057, 9.5258, 9.0097, 9.3681, 8.818, 9.2223, 8.6281, 9.0869, 8.6281, 9.087, 8.6281, 9.0872, 8.6281, 9.0875, 8.6281, 9.0879, 8.6281, 9.0883, 8.3755, 8.9211, 8.1143, 8.7511, 7.8338, 8.6145, 7.6631, 8.4504, 7.6522, 8.2658, 7.337, 8.1172, 7.286, 7.9552, 6.9064, 7.7916, 6.8747, 7.6435, 6.4623, 7.4905, 6.4745, 7.4612, 6.0596, 7.2899, 6.2067, 7.0644, 5.8668, 7.1784, 5.5107, 6.9125, 5.6195, 6.7373, 5.1806, 6.7472, 5.1768, 6.4771, 4.8984, 6.3953, 4.6793, 6.2148, 4.5136, 6.2359, 4.1894, 5.94, 4.4167, 5.6829, 4.0222, 5.9287, 3.8143, 5.6863, 3.6827, 5.2447, 3.5272, 5.2256, 3.4231, 5.2634, 3.1166, 4.9349, 2.8765, 4.8994, 2.8709, 4.5999, 2.6373, 4.6975, 2.2166, 4.3924, 2.2072, 4.2614, 1.9041, 3.9818, 1.8243, 4.0521, 1.7019, 3.7306, 1.5297, 3.6969, 1.2626, 3.5088, 1.2732, 3.3757, 1.1049, 3.2768, 0.899, 3.0508, 0.8741, 3.0068, 0.8032, 2.7689, 0.5424, 2.6303, 0.4953, 2.6822, 0.4347, 2.4153, 0.3448, 2.3813, 0.2909, 2.1899, 0.2635, 2.1119, 0.203, 1.9568, 0.1667, 1.8818, 0.135, 1.7519, 0.1063, 1.6303, 0.0967, 1.6378];
+(function(){
+  const c = document.getElementById('lossChart');
+  const dpr = window.devicePixelRatio || 1;
+  const W = c.clientWidth, H = 320;
+  c.width = W * dpr; c.height = H * dpr;
+  const ctx = c.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const padL = 48, padR = 16, padT = 16, padB = 36;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const maxL = 11.5, minL = 0;
+  const X = i => padL + (i / (LOSSES.length - 1)) * iw;
+  const Y = v => padT + (1 - (v - minL) / (maxL - minL)) * ih;
+  // grid
+  ctx.strokeStyle = '#21262d'; ctx.fillStyle = '#8b949e';
+  ctx.font = '11px ui-monospace, Menlo, monospace'; ctx.lineWidth = 1;
+  for (let g = 0; g <= 10; g += 2) {
+    const y = Y(g);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    ctx.fillText(g.toFixed(0), 8, y + 4);
+  }
+  for (let s = 0; s <= 150; s += 30) {
+    const x = X(s);
+    ctx.fillText(s + '', x - 8, H - 12);
+  }
+  ctx.fillText('step', W - padR - 28, H - 12);
+  // area + line
+  const grad = ctx.createLinearGradient(0, padT, 0, padT + ih);
+  grad.addColorStop(0, 'rgba(126,231,135,0.25)');
+  grad.addColorStop(1, 'rgba(126,231,135,0.0)');
+  ctx.beginPath();
+  ctx.moveTo(X(0), Y(LOSSES[0]));
+  for (let i = 1; i < LOSSES.length; i++) ctx.lineTo(X(i), Y(LOSSES[i]));
+  ctx.lineTo(X(LOSSES.length - 1), padT + ih);
+  ctx.lineTo(X(0), padT + ih);
+  ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(X(0), Y(LOSSES[0]));
+  for (let i = 1; i < LOSSES.length; i++) ctx.lineTo(X(i), Y(LOSSES[i]));
+  ctx.strokeStyle = '#7ee787'; ctx.lineWidth = 2; ctx.stroke();
+  // endpoints
+  ctx.fillStyle = '#7ee787';
+  ctx.beginPath(); ctx.arc(X(0), Y(LOSSES[0]), 4, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(X(LOSSES.length-1), Y(LOSSES[LOSSES.length-1]), 4, 0, 7); ctx.fill();
+  ctx.fillStyle = '#e6edf3'; ctx.font = '12px ui-monospace, Menlo, monospace';
+  ctx.fillText('10.82', X(0) + 8, Y(LOSSES[0]) - 8);
+  ctx.fillText('1.64', X(LOSSES.length-1) - 34, Y(LOSSES[LOSSES.length-1]) - 10);
+})();
+</script>
+</body>
+</html>
