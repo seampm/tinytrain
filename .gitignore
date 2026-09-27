@@ -1,0 +1,7 @@
+build/
+data/
+models/
+*.bin
+*.safetensors
+__pycache__/
+.DS_Store
